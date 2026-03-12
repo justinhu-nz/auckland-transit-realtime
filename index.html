@@ -261,7 +261,7 @@
         var legend = L.control({ position: 'bottomright' });
         legend.onAdd = function (map) {
             var div = L.DomUtil.create('div', 'info legend');
-            div.innerHTML = 'Colour by: <select id="colourscheme"><option>Route</option><option>Occupancy</option><option>Speed</option></select><div id="status"></div>';
+            div.innerHTML = 'Colour by: <select id="colourscheme"><option>Route</option><option>Type</option><option>Occupancy</option><option>Speed</option></select><div id="status"></div>';
             return div;
         };
         legend.addTo(map);
@@ -302,6 +302,10 @@
                 } else if (marker.route_long_name) {
                     color = stringToColour(marker.route_long_name);
                 }
+            } else if (window.colourscheme == "Type") {
+                if (marker.vehicle_type === 2) color = "orange";
+                else if (marker.vehicle_type === 3) color = "blue";
+                else if (marker.vehicle_type === 4) color = "green";
             } else if (window.colourscheme == "Occupancy" && marker.occupancy_status !== undefined) {
                 color = occupancyColors[marker.occupancy_status];
             } else if (window.colourscheme == "Speed") {
@@ -481,6 +485,7 @@
                             marker.options.desc = desc;
                             marker.route_long_name = r.route_long_name;
                             marker.route_type = r.route_type;
+                            marker.vehicle_type = r.route_type;
                             layer = layers[r.route_type] || layers[null];
                         } else {
                             layer = layers[null];
@@ -491,8 +496,10 @@
                     if (layer === layers[null]) {
                         if (/^(AMP|AMA|AMT)/i.test(label)) {
                             layer = layers["oos_train"];
+                            marker.vehicle_type = 2;
                         } else if (vehicleInfo.license_plate) {
                             layer = layers["oos_bus"];
+                            marker.vehicle_type = 3;
                         }
                     }
 
