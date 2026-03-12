@@ -202,11 +202,13 @@
             2: L.layerGroup().addTo(map),
             3: L.layerGroup().addTo(map),
             4: L.layerGroup().addTo(map),
-            null: L.layerGroup().addTo(map)
+            null: L.layerGroup().addTo(map),
+            "oos_bus":   L.layerGroup().addTo(map),
+            "oos_train": L.layerGroup().addTo(map)
         };
 
         var search = L.control.search({
-            layer: L.layerGroup([layers[2], layers[3], layers[4], layers[null]]),
+            layer: L.layerGroup([layers[2], layers[3], layers[4], layers[null], layers["oos_bus"], layers["oos_train"]]),
             initial: false,
             propertyName: 'desc'
         });
@@ -227,10 +229,12 @@
         });
 
         var overlayMaps = {
-            "AT Buses": layers[3],
-            "AT Trains": layers[2],
-            "AT Ferries": layers[4],
-            "Out of Service": layers[null]
+            "AT Buses":              layers[3],
+            "AT Trains":             layers[2],
+            "AT Ferries":            layers[4],
+            "Out of Service Buses":  layers["oos_bus"],
+            "Out of Service Trains": layers["oos_train"],
+            "Out of Service":        layers[null]
         };
 
         L.control.layers(baseMaps, overlayMaps).addTo(map);
@@ -479,7 +483,13 @@
                             marker.route_type = r.route_type;
                             layer = layers[r.route_type] || layers[null];
                         } else {
-                            layer = layers[null];
+                            if (marker.route_type === 3) {
+                                layer = layers["oos_bus"];
+                            } else if (marker.route_type === 2) {
+                                layer = layers["oos_train"];
+                            } else {
+                                layer = layers[null];
+                            }
                         }
                     }
 
