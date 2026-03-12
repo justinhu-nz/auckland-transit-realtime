@@ -483,13 +483,16 @@
                             marker.route_type = r.route_type;
                             layer = layers[r.route_type] || layers[null];
                         } else {
-                            if (marker.route_type === 3) {
-                                layer = layers["oos_bus"];
-                            } else if (marker.route_type === 2) {
-                                layer = layers["oos_train"];
-                            } else {
-                                layer = layers[null];
-                            }
+                            layer = layers[null];
+                        }
+                    }
+
+                    // Classify generic OOS vehicles by label prefix (trains) or license plate (buses)
+                    if (layer === layers[null]) {
+                        if (/^(AMP|AMA|AMT)/i.test(label)) {
+                            layer = layers["oos_train"];
+                        } else if (vehicleInfo.license_plate) {
+                            layer = layers["oos_bus"];
                         }
                     }
 
