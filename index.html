@@ -51,6 +51,18 @@
             background-color: white; padding: 15px; color: black;
             box-shadow: 0 0 15px rgba(0, 0, 0, 0.2); border-radius: 5px;
         }
+        #operator-filter-list {
+            max-height: 160px;
+            overflow-y: auto;
+            font-size: 13px;
+            margin-top: 2px;
+        }
+        #operator-filter-list label {
+            display: block;
+            cursor: pointer;
+            white-space: nowrap;
+            padding: 1px 0;
+        }
         /* Tooltip styling for all devices */
         .leaflet-tooltip {
             max-width: 280px;
@@ -223,15 +235,9 @@
 
         // Use event delegation for .search-input which is dynamically inserted by Leaflet Search
         $(document).on("keyup", ".search-input", function () {
-            var searchVal = this.value.toLowerCase();
             for (var i in markers) {
                 if (!markers.hasOwnProperty(i)) continue;
-                var marker = markers[i];
-                if (!searchVal || (marker.options.desc && marker.options.desc.toLowerCase().includes(searchVal))) {
-                    marker.setStyle({ opacity: 1, fillOpacity: .2 });
-                } else {
-                    marker.setStyle({ opacity: 0, fillOpacity: 0 });
-                }
+                applyVisibilityFilters(markers[i]);
             }
         });
 
@@ -268,7 +274,19 @@
         var legend = L.control({ position: 'bottomright' });
         legend.onAdd = function (map) {
             var div = L.DomUtil.create('div', 'info legend');
-            div.innerHTML = 'Colour by: <select id="colourscheme"><option>Route</option><option>Type</option><option>Occupancy</option><option>Speed</option></select><div id="status"></div>';
+            div.innerHTML = 'Colour by: <select id="colourscheme"><option>Route</option><option>Type</option><option>Occupancy</option><option>Speed</option><option>Operator</option></select><div id="status"></div>'
+                + '<br>Filter by operator:<br>'
+                + '<label><input type="checkbox" id="op-filter-all" checked> All</label>'
+                + '<div id="operator-filter-list">'
+                + '<label><input type="checkbox" class="op-filter" value="Kinetic" checked> <span style="color:#e63946">■</span> Kinetic</label>'
+                + '<label><input type="checkbox" class="op-filter" value="Howick and Eastern" checked> <span style="color:#2a9d8f">■</span> Howick and Eastern</label>'
+                + '<label><input type="checkbox" class="op-filter" value="Bayes" checked> <span style="color:#e9c46a">■</span> Bayes</label>'
+                + '<label><input type="checkbox" class="op-filter" value="Ritchies" checked> <span style="color:#f4a261">■</span> Ritchies</label>'
+                + '<label><input type="checkbox" class="op-filter" value="Pavlovich" checked> <span style="color:#264653">■</span> Pavlovich</label>'
+                + '<label><input type="checkbox" class="op-filter" value="Tranzurban" checked> <span style="color:#6a4c93">■</span> Tranzurban</label>'
+                + '<label><input type="checkbox" class="op-filter" value="Waiheke Bus Co" checked> <span style="color:#1982c4">■</span> Waiheke Bus Co</label>'
+                + '<label><input type="checkbox" class="op-filter" value="Unknown" checked> <span style="color:#888">■</span> Unknown</label>'
+                + '</div>';
             return div;
         };
         legend.addTo(map);
@@ -288,6 +306,45 @@
             $("#colourscheme").val(window.colourscheme);
         }
 
+        var ALL_OPERATORS = ['Kinetic', 'Howick and Eastern', 'Bayes', 'Ritchies', 'Pavlovich', 'Tranzurban', 'Waiheke Bus Co', 'Unknown'];
+        window.activeOperators = new Set(ALL_OPERATORS);
+
+        $(document).on("change", "#op-filter-all", function () {
+            var checked = this.checked;
+            $(".op-filter").prop("checked", checked);
+            window.activeOperators = checked ? new Set(ALL_OPERATORS) : new Set();
+            for (var i in markers) {
+                if (!markers.hasOwnProperty(i)) continue;
+                applyVisibilityFilters(markers[i]);
+            }
+        });
+
+        $(document).on("change", ".op-filter", function () {
+            if (this.checked) {
+                window.activeOperators.add(this.value);
+            } else {
+                window.activeOperators.delete(this.value);
+            }
+            var allChecked = $(".op-filter:checked").length === $(".op-filter").length;
+            $("#op-filter-all").prop("checked", allChecked);
+            for (var i in markers) {
+                if (!markers.hasOwnProperty(i)) continue;
+                applyVisibilityFilters(markers[i]);
+            }
+        });
+
+        function applyVisibilityFilters(marker) {
+            var searchVal = ($(".search-input").val() || "").toLowerCase();
+            var matchesSearch = !searchVal || (marker.options.desc && marker.options.desc.toLowerCase().includes(searchVal));
+            var op = marker.operator || 'Unknown';
+            var matchesOperator = window.activeOperators.has(op);
+            if (matchesSearch && matchesOperator) {
+                marker.setStyle({ opacity: 1, fillOpacity: .2 });
+            } else {
+                marker.setStyle({ opacity: 0, fillOpacity: 0 });
+            }
+        }
+
         function stringToColour(str) {
             var hash = 0;
             for (var i = 0; i < str.length; i++) {
@@ -299,6 +356,31 @@
                 colour += ('00' + value.toString(16)).substr(-2);
             }
             return colour;
+        }
+
+        var operatorColors = {
+            'Kinetic':            '#e63946',
+            'Howick and Eastern': '#2a9d8f',
+            'Bayes':              '#e9c46a',
+            'Ritchies':           '#f4a261',
+            'Pavlovich':          '#264653',
+            'Tranzurban':         '#6a4c93',
+            'Waiheke Bus Co':     '#1982c4'
+        };
+
+        function getOperator(label) {
+            if (!label) return null;
+            var m = label.match(/^([A-Za-z]{2})/);
+            if (!m) return null;
+            var prefix = m[1].toUpperCase();
+            if (prefix === 'NB' || prefix === 'GB') return 'Kinetic';
+            if (prefix === 'HE') return 'Howick and Eastern';
+            if (prefix === 'BA') return 'Bayes';
+            if (prefix === 'RT') return 'Ritchies';
+            if (prefix === 'PC') return 'Pavlovich';
+            if (prefix === 'TR') return 'Tranzurban';
+            if (prefix === 'WB') return 'Waiheke Bus Co';
+            return null;
         }
 
         function updateMarkerColour(marker) {
@@ -317,6 +399,8 @@
                 color = occupancyColors[marker.occupancy_status];
             } else if (window.colourscheme == "Speed") {
                 color = speedColors(marker.speed);
+            } else if (window.colourscheme == "Operator") {
+                color = (marker.operator && operatorColors[marker.operator]) || "#888";
             }
             marker.setStyle({ color: color });
         }
@@ -420,7 +504,8 @@
 
                     var vehicleInfo = v.vehicle || {}; // label, license_plate may be here
                     var label = vehicleInfo.label || ("id " + id);
-                    var desc = `<b>${label}</b><br>`;
+                    var operator = getOperator(label);
+                    var desc = `<b>${label}</b>${operator ? ' <i>(' + operator + ')</i>' : ''}<br>`;
                     var layer = layers[null];
                     var marker = markers[id];
 
@@ -510,6 +595,7 @@
                         }
                     }
 
+                    marker.operator = operator;
                     marker.addTo(layer);
                     marker.speed = Math.round((v.position && v.position.speed) ? v.position.speed : 0);
 
