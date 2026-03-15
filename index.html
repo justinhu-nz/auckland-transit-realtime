@@ -313,8 +313,9 @@
             div.innerHTML = 'Colour by: <select id="colourscheme"><option>Route</option><option>Type</option><option>Occupancy</option><option>Speed</option><option>Operator</option></select>'
                 + '<div id="operator-filters" style="margin-top:8px;max-height:200px;overflow-y:auto;"></div>'
                 + '<div id="status"></div>';
-            L.DomEvent.disableClickPropagation(div);
-            L.DomEvent.disableScrollPropagation(div);
+            // Prevent map interactions when using the legend control
+            L.DomEvent.on(div, 'mousedown dblclick', L.DomEvent.stopPropagation);
+            L.DomEvent.on(div, 'wheel', L.DomEvent.stopPropagation);
             return div;
         };
         legend.addTo(map);
