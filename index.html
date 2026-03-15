@@ -287,6 +287,12 @@
                 + '<label><input type="checkbox" class="op-filter" value="Waiheke Bus Co" checked> <span style="color:#1982c4">■</span> Waiheke Bus Co</label>'
                 + '<label><input type="checkbox" class="op-filter" value="Unknown" checked> <span style="color:#888">■</span> Unknown</label>'
                 + '</div>';
+            // Prevent clicks/touches from propagating to the map (which would
+            // start a pan/drag and break checkbox/select interactions)
+            L.DomEvent.disableClickPropagation(div);
+            // Prevent scroll events from zooming the map when scrolling the
+            // operator filter list
+            L.DomEvent.disableScrollPropagation(div);
             return div;
         };
         legend.addTo(map);
@@ -370,7 +376,7 @@
 
         function getOperator(label) {
             if (!label) return null;
-            var m = label.match(/^([A-Za-z]{2})/);
+            var m = label.match(/^(NB|GB|HE|BA|RT|PC|TR|WB)/i);
             if (!m) return null;
             var prefix = m[1].toUpperCase();
             if (prefix === 'NB' || prefix === 'GB') return 'Kinetic';
