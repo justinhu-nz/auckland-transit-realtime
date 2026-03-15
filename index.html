@@ -630,6 +630,7 @@
 
                     marker.occupancy_status = v.occupancy_status;
                     updateMarkerColour(marker);
+                    applyVisibilityFilters(marker);
                 }
             })
             .catch(err => {
