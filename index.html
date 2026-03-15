@@ -292,7 +292,9 @@
             L.DomEvent.disableClickPropagation(div);
             // Prevent scroll events from zooming the map when scrolling the
             // operator filter list
-            L.DomEvent.disableScrollPropagation(div);
+            if (L.DomEvent.disableScrollPropagation) {
+                L.DomEvent.disableScrollPropagation(div);
+            }
             return div;
         };
         legend.addTo(map);
