@@ -223,15 +223,9 @@
 
         // Use event delegation for .search-input which is dynamically inserted by Leaflet Search
         $(document).on("keyup", ".search-input", function () {
-            var searchVal = this.value.toLowerCase();
             for (var i in markers) {
                 if (!markers.hasOwnProperty(i)) continue;
-                var marker = markers[i];
-                if (!searchVal || (marker.options.desc && marker.options.desc.toLowerCase().includes(searchVal))) {
-                    marker.setStyle({ opacity: 1, fillOpacity: .2 });
-                } else {
-                    marker.setStyle({ opacity: 0, fillOpacity: 0 });
-                }
+                applyVisibilityFilters(markers[i]);
             }
         });
 
@@ -265,13 +259,117 @@
         });
         new RefreshControl().addTo(map);
 
+        // Operator prefix mapping and colours
+        var operatorPrefixes = {
+            'NB': 'Kinetic', 'GB': 'Kinetic',
+            'HE': 'Howick and Eastern',
+            'BA': 'Bayes',
+            'RT': 'Ritchies',
+            'PC': 'Pavlovich',
+            'TR': 'Tranzurban',
+            'WB': 'Waiheke Bus Co'
+        };
+        var operatorColors = {
+            'Kinetic': '#e63946',
+            'Howick and Eastern': '#2a9d8f',
+            'Bayes': '#e9c46a',
+            'Ritchies': '#f4a261',
+            'Pavlovich': '#264653',
+            'Tranzurban': '#6a4c93',
+            'Waiheke Bus Co': '#1982c4',
+            'Unknown': '#888888'
+        };
+        var allOperatorNames = ['Kinetic', 'Howick and Eastern', 'Bayes', 'Ritchies', 'Pavlovich', 'Tranzurban', 'Waiheke Bus Co', 'Unknown'];
+
+        // All operators active by default
+        window.activeOperators = new Set(allOperatorNames);
+
+        function getOperator(label) {
+            if (!label) return 'Unknown';
+            var prefix = label.substring(0, 2).toUpperCase();
+            return operatorPrefixes[prefix] || 'Unknown';
+        }
+
+        function applyVisibilityFilters(marker) {
+            var searchInput = document.querySelector('.search-input');
+            var searchVal = searchInput ? searchInput.value.toLowerCase() : '';
+            var matchesSearch = !searchVal || (marker.options.desc && marker.options.desc.toLowerCase().includes(searchVal));
+
+            var matchesOperator = true;
+            if (marker.operator) {
+                matchesOperator = window.activeOperators.has(marker.operator);
+            }
+
+            if (matchesSearch && matchesOperator) {
+                marker.setStyle({ opacity: 1, fillOpacity: .2 });
+            } else {
+                marker.setStyle({ opacity: 0, fillOpacity: 0 });
+            }
+        }
+
         var legend = L.control({ position: 'bottomright' });
         legend.onAdd = function (map) {
             var div = L.DomUtil.create('div', 'info legend');
-            div.innerHTML = 'Colour by: <select id="colourscheme"><option>Route</option><option>Type</option><option>Occupancy</option><option>Speed</option></select><div id="status"></div>';
+            div.innerHTML = 'Colour by: <select id="colourscheme"><option>Route</option><option>Type</option><option>Occupancy</option><option>Speed</option><option>Operator</option></select>'
+                + '<div id="operator-filters" style="margin-top:8px;max-height:200px;overflow-y:auto;"></div>'
+                + '<div id="status"></div>';
+            L.DomEvent.disableClickPropagation(div);
+            L.DomEvent.disableScrollPropagation(div);
             return div;
         };
         legend.addTo(map);
+
+        // Build operator filter checkboxes
+        function buildOperatorFilters() {
+            var container = document.getElementById('operator-filters');
+            if (!container) return;
+            var html = '<div style="font-weight:bold;margin-bottom:4px;">Filter operators:</div>';
+            html += '<label style="display:block;margin-bottom:2px;cursor:pointer;">'
+                + '<input type="checkbox" id="op-all" checked> <b>All</b></label>';
+            allOperatorNames.forEach(function(op) {
+                var c = operatorColors[op] || '#888';
+                html += '<label style="display:block;margin-bottom:2px;cursor:pointer;">'
+                    + '<input type="checkbox" class="op-cb" data-operator="' + op + '" checked> '
+                    + '<span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:' + c + ';vertical-align:middle;margin-right:4px;"></span>'
+                    + op + '</label>';
+            });
+            container.innerHTML = html;
+
+            // "All" checkbox toggles all
+            document.getElementById('op-all').addEventListener('change', function() {
+                var checked = this.checked;
+                var cbs = document.querySelectorAll('.op-cb');
+                cbs.forEach(function(cb) { cb.checked = checked; });
+                if (checked) {
+                    window.activeOperators = new Set(allOperatorNames);
+                } else {
+                    window.activeOperators.clear();
+                }
+                for (var i in markers) {
+                    if (!markers.hasOwnProperty(i)) continue;
+                    applyVisibilityFilters(markers[i]);
+                }
+            });
+
+            // Individual operator checkboxes
+            document.querySelectorAll('.op-cb').forEach(function(cb) {
+                cb.addEventListener('change', function() {
+                    var op = this.getAttribute('data-operator');
+                    if (this.checked) {
+                        window.activeOperators.add(op);
+                    } else {
+                        window.activeOperators.delete(op);
+                    }
+                    // Update "All" checkbox state
+                    document.getElementById('op-all').checked = (window.activeOperators.size === allOperatorNames.length);
+                    for (var i in markers) {
+                        if (!markers.hasOwnProperty(i)) continue;
+                        applyVisibilityFilters(markers[i]);
+                    }
+                });
+            });
+        }
+        buildOperatorFilters();
 
         $(document).on("change", "#colourscheme", function () {
             window.colourscheme = this.value;
@@ -317,6 +415,8 @@
                 color = occupancyColors[marker.occupancy_status];
             } else if (window.colourscheme == "Speed") {
                 color = speedColors(marker.speed);
+            } else if (window.colourscheme == "Operator") {
+                color = operatorColors[marker.operator] || operatorColors['Unknown'];
             }
             marker.setStyle({ color: color });
         }
@@ -513,6 +613,10 @@
                     marker.addTo(layer);
                     marker.speed = Math.round((v.position && v.position.speed) ? v.position.speed : 0);
 
+                    // Determine operator from label prefix (buses only)
+                    var operator = getOperator(label);
+                    marker.operator = operator;
+
                     // Read bike allowed from multiple possible locations (vehicle-level, v-level, trip-level, attributes)
                     var bikeAllowed =
                         (v.bike_allowed ?? v.bikes_allowed) ??
@@ -529,7 +633,8 @@
                     marker.accessibility = accessibility;
 
                     // Bind tooltip with unique element ids per marker to allow updates when trip fetch returns
-                    var tooltipHtml = `${desc}
+                    var operatorDisplay = operator !== 'Unknown' ? ' <i>(' + operator + ')</i>' : '';
+                    var tooltipHtml = `${desc}${operatorDisplay}${operatorDisplay ? '<br>' : ''}
                         Speed: ${marker.speed} km/h<br>
                         Occupancy: ${occupancy[v.occupancy_status] || ""}<br>
                         License plate: ${vehicleInfo.license_plate || ""}<br>
@@ -544,6 +649,7 @@
 
                     marker.occupancy_status = v.occupancy_status;
                     updateMarkerColour(marker);
+                    applyVisibilityFilters(marker);
                 }
             })
             .catch(err => {
