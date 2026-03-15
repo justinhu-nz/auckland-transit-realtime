@@ -344,8 +344,12 @@
         function applyVisibilityFilters(marker) {
             var searchVal = ($(".search-input").val() || "").toLowerCase();
             var matchesSearch = !searchVal || (marker.options.desc && marker.options.desc.toLowerCase().includes(searchVal));
-            var op = marker.operator || 'Unknown';
-            var matchesOperator = window.activeOperators.has(op);
+            // Operator filter applies to buses only (vehicle_type 3). Trains (2) and ferries (4)
+            // have operator=null which would otherwise group them under 'Unknown' and hide them
+            // when that checkbox is unchecked.
+            var matchesOperator = (marker.vehicle_type === 3)
+                ? window.activeOperators.has(marker.operator || 'Unknown')
+                : true;
             if (matchesSearch && matchesOperator) {
                 marker.setStyle({ opacity: 1, fillOpacity: .2 });
             } else {
@@ -604,6 +608,12 @@
                     }
 
                     marker.operator = operator;
+                    // Remove from any previous layer group before re-adding, so markers that
+                    // transition layers (e.g. layers[null] → layers[3] once route info arrives)
+                    // don't appear as duplicates in both groups.
+                    for (var lk in layers) {
+                        if (layers[lk].hasLayer(marker)) layers[lk].removeLayer(marker);
+                    }
                     marker.addTo(layer);
                     marker.speed = Math.round((v.position && v.position.speed) ? v.position.speed : 0);
 
