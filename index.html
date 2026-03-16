@@ -292,7 +292,8 @@
 
         function applyVisibilityFilters(marker) {
             var searchInput = document.querySelector('.search-input');
-            var searchVal = searchInput ? searchInput.value.toLowerCase() : '';
+            var rawVal = searchInput ? searchInput.value.trim() : '';
+            var searchVal = (rawVal.toLowerCase() === 'search...') ? '' : rawVal.toLowerCase();
             var matchesSearch = !searchVal || (marker.options.desc && marker.options.desc.toLowerCase().includes(searchVal));
 
             var matchesOperator = true;
