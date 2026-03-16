@@ -37,6 +37,42 @@
             transition: background 0.15s;
             user-select: none;
         }
+        #route-filter { position: relative; margin-top: 8px; }
+        #route-filter-label { font-weight: bold; margin-bottom: 4px; }
+        #route-input {
+            width: 100%; box-sizing: border-box; padding: 4px 6px;
+            border: 1px solid #aaa; border-radius: 3px; font-size: 13px;
+        }
+        #route-suggestions {
+            position: absolute; left: 0; right: 0; max-height: 180px;
+            overflow-y: auto; background: white; border: 1px solid #ccc;
+            border-top: none; border-radius: 0 0 3px 3px; z-index: 1000;
+            display: none; box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+        }
+        .route-suggestion {
+            padding: 5px 8px; cursor: pointer; font-size: 13px;
+            border-bottom: 1px solid #eee;
+        }
+        .route-suggestion:hover, .route-suggestion.active { background: #e8f0fe; }
+        .route-suggestion .route-num { font-weight: bold; }
+        #route-chips {
+            display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px;
+        }
+        .route-chip {
+            display: inline-flex; align-items: center; gap: 3px;
+            background: #e0e0e0; border-radius: 12px; padding: 2px 8px;
+            font-size: 12px; cursor: default; white-space: nowrap;
+        }
+        .route-chip-x {
+            cursor: pointer; font-weight: bold; color: #666;
+            margin-left: 2px; font-size: 14px; line-height: 1;
+        }
+        .route-chip-x:hover { color: #d00; }
+        #route-clear {
+            font-size: 11px; color: #1a73e8; cursor: pointer;
+            margin-top: 3px; display: none;
+        }
+        #route-clear:hover { text-decoration: underline; }
         .refresh-btn:hover { background: #f4f4f4; }
         .refresh-btn.spinning { animation: spin 0.7s linear infinite; }
         @keyframes spin { to { transform: rotate(360deg); } }
@@ -144,6 +180,19 @@
                 line-height: 44px !important;
                 font-size: 22px !important;
             }
+            #route-input {
+                font-size: 16px !important;
+                min-height: 44px;
+                padding: 8px 10px;
+            }
+            .route-suggestion {
+                padding: 10px 12px;
+                font-size: 15px;
+                min-height: 44px;
+                display: flex; align-items: center;
+            }
+            .route-chip { font-size: 14px; padding: 4px 10px; }
+            .route-chip-x { font-size: 16px; min-width: 22px; min-height: 22px; display: flex; align-items: center; justify-content: center; }
             .leaflet-bottom.leaflet-right {
                 padding-bottom: env(safe-area-inset-bottom, 0px);
                 padding-right: env(safe-area-inset-right, 0px);
