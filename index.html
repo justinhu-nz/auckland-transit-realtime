@@ -73,6 +73,16 @@
             margin-top: 3px; display: none;
         }
         #route-clear:hover { text-decoration: underline; }
+        .kinetic-toggle {
+            font-size: 11px; color: #1a73e8; cursor: pointer;
+            margin-left: 20px; user-select: none;
+        }
+        .kinetic-toggle:hover { text-decoration: underline; }
+        .kinetic-sub {
+            margin-left: 28px; display: none; border-left: 2px solid #7b2d8b;
+            padding-left: 6px; margin-bottom: 2px;
+        }
+        .kinetic-sub.open { display: block; }
         .refresh-btn:hover { background: #f4f4f4; }
         .refresh-btn.spinning { animation: spin 0.7s linear infinite; }
         @keyframes spin { to { transform: rotate(360deg); } }
@@ -330,6 +340,14 @@
         };
         var allOperatorNames = ['Kinetic', 'Howick and Eastern', 'Bayes', 'Ritchies', 'Pavlovich', 'Tranzurban', 'Waiheke Bus Co', 'Unknown'];
 
+        // Kinetic sub-operators
+        var kineticSubs = {
+            'NB': { name: 'NZ Bus', color: '#9b59b6' },
+            'GB': { name: 'Go Bus', color: '#5b2c6f' }
+        };
+        // Which Kinetic sub-operators are active (both by default)
+        window.activeKineticSubs = new Set(['NB', 'GB']);
+
         // All operators active by default
         window.activeOperators = new Set(allOperatorNames);
 
@@ -337,6 +355,11 @@
             if (!label) return 'Unknown';
             var prefix = label.substring(0, 2).toUpperCase();
             return operatorPrefixes[prefix] || 'Unknown';
+        }
+
+        function getLabelPrefix(label) {
+            if (!label) return null;
+            return label.substring(0, 2).toUpperCase();
         }
 
         function applyVisibilityFilters(marker) {
@@ -348,9 +371,19 @@
             var matchesOperator = true;
             if (marker.operator) {
                 matchesOperator = window.activeOperators.has(marker.operator);
+                // Kinetic sub-operator filter
+                if (matchesOperator && marker.operator === 'Kinetic' && marker._labelPrefix) {
+                    matchesOperator = window.activeKineticSubs.has(marker._labelPrefix);
+                }
             }
 
-            if (matchesSearch && matchesOperator) {
+            var matchesRoute = true;
+            if (window.activeRouteNames && window.activeRouteNames.size > 0) {
+                var markerRoute = marker.route_short_name || marker.route_long_name;
+                matchesRoute = markerRoute && window.activeRouteNames.has(markerRoute);
+            }
+
+            if (matchesSearch && matchesOperator && matchesRoute) {
                 marker.setStyle({ opacity: 1, fillOpacity: .2 });
             } else {
                 marker.setStyle({ opacity: 0, fillOpacity: 0 });
@@ -361,6 +394,13 @@
         legend.onAdd = function (map) {
             var div = L.DomUtil.create('div', 'info legend');
             div.innerHTML = 'Colour by: <select id="colourscheme"><option>Route</option><option>Type</option><option>Occupancy</option><option>Speed</option><option>Operator</option></select>'
+                + '<div id="route-filter">'
+                + '<div id="route-filter-label">Filter routes:</div>'
+                + '<input id="route-input" type="text" placeholder="Type route number..." autocomplete="off">'
+                + '<div id="route-suggestions"></div>'
+                + '<div id="route-chips"></div>'
+                + '<div id="route-clear">Clear all</div>'
+                + '</div>'
                 + '<div id="operator-filters" style="margin-top:8px;max-height:200px;overflow-y:auto;"></div>'
                 + '<div id="status"></div>';
             L.DomEvent.disableClickPropagation(div);
@@ -382,6 +422,19 @@
                     + '<input type="checkbox" class="op-cb" data-operator="' + op + '" checked> '
                     + '<span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:' + c + ';vertical-align:middle;margin-right:4px;"></span>'
                     + op + '</label>';
+                if (op === 'Kinetic') {
+                    html += '<span class="kinetic-toggle" id="kinetic-toggle">&#9654; NZ Bus / Go Bus</span>';
+                    html += '<div class="kinetic-sub" id="kinetic-sub">';
+                    for (var prefix in kineticSubs) {
+                        if (!kineticSubs.hasOwnProperty(prefix)) continue;
+                        var sub = kineticSubs[prefix];
+                        html += '<label style="display:block;margin-bottom:2px;cursor:pointer;">'
+                            + '<input type="checkbox" class="kinetic-sub-cb" data-prefix="' + prefix + '" checked> '
+                            + '<span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:' + sub.color + ';vertical-align:middle;margin-right:4px;"></span>'
+                            + sub.name + ' <span style="color:#888;font-size:11px;">(' + prefix + ')</span></label>';
+                    }
+                    html += '</div>';
+                }
             });
             container.innerHTML = html;
 
@@ -418,8 +471,191 @@
                     }
                 });
             });
+            // Kinetic accordion toggle
+            document.getElementById('kinetic-toggle').addEventListener('click', function() {
+                var sub = document.getElementById('kinetic-sub');
+                var open = sub.classList.toggle('open');
+                this.innerHTML = (open ? '&#9660; ' : '&#9654; ') + 'NZ Bus / Go Bus';
+                // When accordion opens, recolor Kinetic markers to show sub-operator distinction
+                if (open) {
+                    for (var i in markers) {
+                        if (!markers.hasOwnProperty(i)) continue;
+                        if (markers[i].operator === 'Kinetic') updateMarkerColour(markers[i]);
+                    }
+                } else {
+                    for (var i in markers) {
+                        if (!markers.hasOwnProperty(i)) continue;
+                        if (markers[i].operator === 'Kinetic') updateMarkerColour(markers[i]);
+                    }
+                }
+            });
+
+            // Kinetic sub-operator checkboxes
+            document.querySelectorAll('.kinetic-sub-cb').forEach(function(cb) {
+                cb.addEventListener('change', function() {
+                    var prefix = this.getAttribute('data-prefix');
+                    if (this.checked) {
+                        window.activeKineticSubs.add(prefix);
+                    } else {
+                        window.activeKineticSubs.delete(prefix);
+                    }
+                    // Update parent Kinetic checkbox state
+                    var kineticCb = document.querySelector('.op-cb[data-operator="Kinetic"]');
+                    if (window.activeKineticSubs.size === 0) {
+                        if (kineticCb) kineticCb.checked = false;
+                        window.activeOperators.delete('Kinetic');
+                    } else {
+                        if (kineticCb) kineticCb.checked = true;
+                        window.activeOperators.add('Kinetic');
+                    }
+                    document.getElementById('op-all').checked = (window.activeOperators.size === allOperatorNames.length);
+                    for (var i in markers) {
+                        if (!markers.hasOwnProperty(i)) continue;
+                        applyVisibilityFilters(markers[i]);
+                    }
+                });
+            });
         }
         buildOperatorFilters();
+
+        // Route filter: empty set = show all, non-empty = show only these route names
+        window.activeRouteNames = new Set();
+
+        function getAllRouteNames() {
+            var names = new Set();
+            for (var id in routes) {
+                if (!routes.hasOwnProperty(id)) continue;
+                var name = routes[id].route_short_name || routes[id].route_long_name;
+                if (name) names.add(name);
+            }
+            var arr = Array.from(names);
+            arr.sort(function(a, b) {
+                var na = parseInt(a, 10), nb = parseInt(b, 10);
+                if (!isNaN(na) && !isNaN(nb)) return na - nb;
+                if (!isNaN(na)) return -1;
+                if (!isNaN(nb)) return 1;
+                return a.localeCompare(b);
+            });
+            return arr;
+        }
+
+        function applyAllVisibility() {
+            for (var i in markers) {
+                if (!markers.hasOwnProperty(i)) continue;
+                applyVisibilityFilters(markers[i]);
+            }
+        }
+
+        function renderRouteChips() {
+            var container = document.getElementById('route-chips');
+            var clearBtn = document.getElementById('route-clear');
+            if (!container) return;
+            if (window.activeRouteNames.size === 0) {
+                container.innerHTML = '';
+                if (clearBtn) clearBtn.style.display = 'none';
+                return;
+            }
+            if (clearBtn) clearBtn.style.display = 'block';
+            var html = '';
+            window.activeRouteNames.forEach(function(name) {
+                html += '<span class="route-chip">' + name
+                    + '<span class="route-chip-x" data-route="' + name + '">&times;</span></span>';
+            });
+            container.innerHTML = html;
+            container.querySelectorAll('.route-chip-x').forEach(function(x) {
+                x.addEventListener('click', function() {
+                    window.activeRouteNames.delete(this.getAttribute('data-route'));
+                    renderRouteChips();
+                    applyAllVisibility();
+                });
+            });
+        }
+
+        $(document).on('click', '#route-clear', function() {
+            window.activeRouteNames.clear();
+            renderRouteChips();
+            applyAllVisibility();
+        });
+
+        var routeSugHighlight = -1;
+        $(document).on('input', '#route-input', function() {
+            var val = this.value.trim().toLowerCase();
+            var sugBox = document.getElementById('route-suggestions');
+            routeSugHighlight = -1;
+            if (!val) { sugBox.style.display = 'none'; return; }
+            var allNames = getAllRouteNames();
+            // Prioritize starts-with matches, then contains
+            var starts = [], contains = [];
+            allNames.forEach(function(name) {
+                if (window.activeRouteNames.has(name)) return; // already selected
+                var lower = name.toLowerCase();
+                if (lower.indexOf(val) === 0) starts.push(name);
+                else if (lower.indexOf(val) > 0) contains.push(name);
+            });
+            var matches = starts.concat(contains).slice(0, 12);
+            if (matches.length === 0) {
+                sugBox.innerHTML = '<div class="route-suggestion" style="color:#888;">No matching routes</div>';
+                sugBox.style.display = 'block';
+                return;
+            }
+            sugBox.innerHTML = matches.map(function(name, idx) {
+                var highlighted = name.replace(new RegExp('(' + val.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ')', 'i'),
+                    '<span class="route-num">$1</span>');
+                return '<div class="route-suggestion" data-route="' + name + '" data-idx="' + idx + '">' + highlighted + '</div>';
+            }).join('');
+            sugBox.style.display = 'block';
+
+            sugBox.querySelectorAll('.route-suggestion').forEach(function(el) {
+                el.addEventListener('click', function() {
+                    selectRouteSuggestion(this.getAttribute('data-route'));
+                });
+            });
+        });
+
+        function selectRouteSuggestion(name) {
+            if (!name) return;
+            window.activeRouteNames.add(name);
+            document.getElementById('route-input').value = '';
+            document.getElementById('route-suggestions').style.display = 'none';
+            routeSugHighlight = -1;
+            renderRouteChips();
+            applyAllVisibility();
+        }
+
+        $(document).on('keydown', '#route-input', function(e) {
+            var sugBox = document.getElementById('route-suggestions');
+            var items = sugBox.querySelectorAll('.route-suggestion[data-route]');
+            if (!items.length || sugBox.style.display === 'none') return;
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                routeSugHighlight = Math.min(routeSugHighlight + 1, items.length - 1);
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                routeSugHighlight = Math.max(routeSugHighlight - 1, 0);
+            } else if (e.key === 'Enter') {
+                e.preventDefault();
+                if (routeSugHighlight >= 0 && routeSugHighlight < items.length) {
+                    selectRouteSuggestion(items[routeSugHighlight].getAttribute('data-route'));
+                }
+                return;
+            } else if (e.key === 'Escape') {
+                sugBox.style.display = 'none';
+                routeSugHighlight = -1;
+                return;
+            } else { return; }
+            items.forEach(function(el, i) {
+                el.classList.toggle('active', i === routeSugHighlight);
+                if (i === routeSugHighlight) el.scrollIntoView({ block: 'nearest' });
+            });
+        });
+
+        // Close suggestions when clicking outside
+        $(document).on('click', function(e) {
+            if (!$(e.target).closest('#route-filter').length) {
+                var sugBox = document.getElementById('route-suggestions');
+                if (sugBox) sugBox.style.display = 'none';
+            }
+        });
 
         $(document).on("change", "#colourscheme", function () {
             window.colourscheme = this.value;
@@ -467,6 +703,12 @@
                 color = speedColors(marker.speed);
             } else if (window.colourscheme == "Operator") {
                 color = operatorColors[marker.operator] || operatorColors['Unknown'];
+                // Show sub-operator colors when Kinetic accordion is open
+                var kSub = document.getElementById('kinetic-sub');
+                if (marker.operator === 'Kinetic' && marker._labelPrefix && kSub && kSub.classList.contains('open')) {
+                    var subInfo = kineticSubs[marker._labelPrefix];
+                    if (subInfo) color = subInfo.color;
+                }
             }
             marker.setStyle({ color: color });
         }
@@ -641,6 +883,7 @@
                             desc += `Agency: ${r.agency_id}<br>Route: ${r.route_long_name}<br>Headsign: <div id="headsign-${sid}"></div>`;
                             marker.options.desc = desc;
                             marker.route_long_name = r.route_long_name;
+                            marker.route_short_name = r.route_short_name;
                             marker.route_type = r.route_type;
                             marker.vehicle_type = r.route_type;
                             layer = layers[r.route_type] || layers[null];
@@ -666,6 +909,7 @@
                     // Determine operator from label prefix (buses only)
                     var operator = getOperator(label);
                     marker.operator = operator;
+                    marker._labelPrefix = getLabelPrefix(label);
 
                     // Read bike allowed from multiple possible locations (vehicle-level, v-level, trip-level, attributes)
                     var bikeAllowed =
