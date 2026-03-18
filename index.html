@@ -24,19 +24,56 @@
         body, html { width: 100%; height: 100%; margin: 0; padding: 0; }
         #map { position: absolute; width: 100%; height: 100%; left: 0; top: 0; }
 .refresh-btn {
-            display: block;
-            width: 34px; height: 34px;
-            line-height: 34px;
-            text-align: center;
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 30px; height: 30px;
             background: white;
-            border-radius: 4px;
+            border-radius: 2px;
             cursor: pointer;
-            font-size: 18px;
             box-shadow: 0 1px 5px rgba(0,0,0,0.4);
             border: 2px solid rgba(0,0,0,0.2);
-            transition: background 0.15s;
+            transition: background 0.2s, transform 0.1s, box-shadow 0.2s;
             user-select: none;
+            overflow: hidden;
         }
+        .refresh-btn .refresh-icon {
+            width: 16px; height: 16px;
+            fill: none;
+            stroke: #555;
+            stroke-width: 2;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+            transition: stroke 0.3s, transform 0.3s;
+        }
+        .refresh-btn .refresh-check {
+            position: absolute;
+            width: 14px; height: 14px;
+            fill: none;
+            stroke: #2ecc71;
+            stroke-width: 2.5;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+            opacity: 0;
+            transform: scale(0);
+            transition: opacity 0.2s, transform 0.2s;
+        }
+        .refresh-btn .refresh-check.show {
+            opacity: 1;
+            transform: scale(1);
+            transition: opacity 0.15s, transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+        .refresh-btn .refresh-icon.hide { opacity: 0; transform: scale(0); }
+        .refresh-btn::after {
+            content: '';
+            position: absolute;
+            width: 100%; height: 100%;
+            background: radial-gradient(circle, rgba(0,120,168,0.15) 0%, transparent 70%);
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+        .refresh-btn:active { transform: scale(0.9); }
         #route-filter { position: relative; margin-top: 8px; }
         #route-filter-label { font-weight: bold; margin-bottom: 4px; }
         #route-input {
@@ -83,9 +120,25 @@
             padding-left: 6px; margin-bottom: 2px;
         }
         .kinetic-sub.open { display: block; }
-        .refresh-btn:hover { background: #f4f4f4; }
-        .refresh-btn.spinning { animation: spin 0.7s linear infinite; }
-        @keyframes spin { to { transform: rotate(360deg); } }
+        .refresh-btn:hover {
+            background: #f8fbff;
+            box-shadow: 0 1px 5px rgba(0,120,168,0.3);
+            border-color: rgba(0,120,168,0.3);
+        }
+        .refresh-btn:hover::after { opacity: 1; }
+        .refresh-btn:hover .refresh-icon { stroke: #0078A8; }
+        .refresh-btn.spinning .refresh-icon {
+            animation: refresh-spin 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+            stroke: #0078A8;
+        }
+        @keyframes refresh-spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .refresh-btn.done {
+            border-color: rgba(46,204,113,0.4);
+            box-shadow: 0 1px 8px rgba(46,204,113,0.3);
+        }
         /* Fix search button icon: CDN CSS uses a relative path that fails to load */
         .leaflet-control-search .search-button {
             background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='10' cy='10' r='6' fill='none' stroke='%23333' stroke-width='2.5'/%3E%3Cline x1='14.5' y1='14.5' x2='20' y2='20' stroke='%23333' stroke-width='2.5' stroke-linecap='round'/%3E%3C/svg%3E");
@@ -185,10 +238,12 @@
                 text-overflow: ellipsis;
             }
             .refresh-btn {
-                width: 44px !important;
-                height: 44px !important;
-                line-height: 44px !important;
-                font-size: 22px !important;
+                width: 40px !important;
+                height: 40px !important;
+            }
+            .refresh-btn svg {
+                width: 20px !important;
+                height: 20px !important;
             }
             #route-input {
                 font-size: 16px !important;
@@ -270,11 +325,12 @@
             4: L.layerGroup().addTo(map),
             null: L.layerGroup().addTo(map),
             "oos_bus":   L.layerGroup().addTo(map),
-            "oos_train": L.layerGroup().addTo(map)
+            "oos_train": L.layerGroup().addTo(map),
+            "oos_ferry": L.layerGroup().addTo(map)
         };
 
         var search = L.control.search({
-            layer: L.layerGroup([layers[2], layers[3], layers[4], layers[null], layers["oos_bus"], layers["oos_train"]]),
+            layer: L.layerGroup([layers[2], layers[3], layers[4], layers[null], layers["oos_bus"], layers["oos_train"], layers["oos_ferry"]]),
             initial: false,
             propertyName: 'desc'
         });
@@ -294,23 +350,39 @@
             "AT Ferries":            layers[4],
             "Out of Service Buses":  layers["oos_bus"],
             "Out of Service Trains": layers["oos_train"],
+            "Out of Service Ferries": layers["oos_ferry"],
             "Out of Service":        layers[null]
         };
 
         L.control.layers(baseMaps, overlayMaps).addTo(map);
+        map.removeLayer(layers[null]); // "Out of Service" off by default
 
         var RefreshControl = L.Control.extend({
             options: { position: 'topleft' },
             onAdd: function () {
                 var btn = L.DomUtil.create('div', 'refresh-btn');
                 btn.title = 'Refresh vehicle data';
-                btn.innerHTML = '&#8635;';
+                btn.innerHTML = '<svg class="refresh-icon" viewBox="0 0 24 24"><path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M3 22v-6h6"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/></svg>'
+                    + '<svg class="refresh-check" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg>';
                 L.DomEvent.disableClickPropagation(btn);
                 L.DomEvent.on(btn, 'click', function () {
                     if (!btn.classList.contains('spinning')) {
                         btn.classList.add('spinning');
                         loop();
-                        setTimeout(function () { btn.classList.remove('spinning'); }, 700);
+                        setTimeout(function () {
+                            btn.classList.remove('spinning');
+                            // Show checkmark
+                            var icon = btn.querySelector('.refresh-icon');
+                            var check = btn.querySelector('.refresh-check');
+                            icon.classList.add('hide');
+                            check.classList.add('show');
+                            btn.classList.add('done');
+                            setTimeout(function () {
+                                check.classList.remove('show');
+                                icon.classList.remove('hide');
+                                btn.classList.remove('done');
+                            }, 1200);
+                        }, 800);
                     }
                 });
                 return btn;
@@ -332,13 +404,14 @@
             'Kinetic': '#7b2d8b',
             'Howick and Eastern': '#d62828',
             'Bayes': '#2a9d8f',
-            'Ritchies': '#f0c808',
+            'Ritchies': '#e6b800',
             'Pavlovich': '#e76f51',
             'Tranzurban': '#48bfe3',
             'Waiheke Bus Co': '#264653',
+            'Auckland One Rail': '#77BCA7',
             'Unknown': '#888888'
         };
-        var allOperatorNames = ['Kinetic', 'Howick and Eastern', 'Bayes', 'Ritchies', 'Pavlovich', 'Tranzurban', 'Waiheke Bus Co', 'Unknown'];
+        var allOperatorNames = ['Kinetic', 'Howick and Eastern', 'Bayes', 'Ritchies', 'Pavlovich', 'Tranzurban', 'Waiheke Bus Co', 'Auckland One Rail', 'Unknown'];
 
         // Kinetic sub-operators
         var kineticSubs = {
@@ -401,7 +474,10 @@
                 + '<div id="route-chips"></div>'
                 + '<div id="route-clear">Clear all</div>'
                 + '</div>'
-                + '<div id="operator-filters" style="margin-top:8px;max-height:200px;overflow-y:auto;"></div>'
+                + '<div id="operator-section" style="margin-top:8px;">'
+                + '<span id="operator-toggle" style="font-weight:bold;cursor:pointer;user-select:none;">&#9654; Filter operators</span>'
+                + '<div id="operator-filters" style="display:none;max-height:200px;overflow-y:auto;margin-top:4px;"></div>'
+                + '</div>'
                 + '<div id="status"></div>';
             L.DomEvent.disableClickPropagation(div);
             L.DomEvent.disableScrollPropagation(div);
@@ -413,7 +489,7 @@
         function buildOperatorFilters() {
             var container = document.getElementById('operator-filters');
             if (!container) return;
-            var html = '<div style="font-weight:bold;margin-bottom:4px;">Filter operators:</div>';
+            var html = '';
             html += '<label style="display:block;margin-bottom:2px;cursor:pointer;">'
                 + '<input type="checkbox" id="op-all" checked> <b>All</b></label>';
             allOperatorNames.forEach(function(op) {
@@ -517,6 +593,14 @@
             });
         }
         buildOperatorFilters();
+
+        // Operator section collapse/expand toggle
+        document.getElementById('operator-toggle').addEventListener('click', function() {
+            var filters = document.getElementById('operator-filters');
+            var open = filters.style.display !== 'none';
+            filters.style.display = open ? 'none' : 'block';
+            this.innerHTML = (open ? '&#9654; ' : '&#9660; ') + 'Filter operators';
+        });
 
         // Route filter: empty set = show all, non-empty = show only these route names
         window.activeRouteNames = new Set();
@@ -666,6 +750,50 @@
             }
         });
 
+        // Route colour map from Auckland Transit colour key
+        var routeColors = {
+            '101':'#00B0C1','105':'#7A599D','106':'#37628C','111':'#E6A400','112':'#ED6E9C',
+            '114':'#B75671','116':'#DE5227','11T':'#26B8EB','11W':'#26B8EB','12':'#00975F',
+            '122':'#F49EC4','123':'#F49EC4','125':'#9373B1','126':'#BCCF00','128':'#009A93',
+            '13':'#7CC8C5','132':'#C4816C','135':'#F26522','14':'#E4032E','143':'#946AAB',
+            '145':'#D8458E','147':'#ADA335','148':'#8D0055','149':'#F9A131','152':'#00A6DE',
+            '154':'#8EC89A','161':'#9F649A','162':'#D7AF00','170':'#919F3C','171':'#00664D',
+            '172':'#A22D63','18':'#0069B4','186':'#924F63','191':'#E77D95','195':'#718A7E',
+            '20':'#D7007F','209':'#15AF97','22N':'#AE7DA8','22R':'#AE7DA8','24B':'#0093C5',
+            '24R':'#0093C5','252':'#B45322','253':'#B45322','25B':'#B5511B','25L':'#B5511B',
+            '27H':'#3FA5BD','27T':'#3FA5BD','27W':'#3FA5BD','295':'#8C895F','298':'#4C7BBE',
+            '30':'#7482B0','309':'#573A66','309X':'#573A66','311':'#2596be','31':'#B55611',
+            '313':'#95C11F','314':'#78CAE1','32':'#E83C7A','321':'#951B81','323':'#3ABDDE',
+            '324':'#00887B','325':'#946AAB','326':'#8BADDC','33':'#0069B4','35':'#1E894F',
+            '351':'#B7A86C','352':'#00975F','353':'#AA026D','355':'#D6606F','36':'#A42523',
+            '361':'#EA5623','362':'#5C3E24','363':'#539326','365':'#D73E86','366':'#89CCCA',
+            '372':'#8EC89A','373':'#E74011','376':'#B75671','377':'#457B6E','378':'#F39200',
+            '38':'#009AC2','391':'#F39200','392':'#95C11F','393':'#00B1EB','394':'#A16D0B',
+            '395':'#946AAB','396':'#DC5054','399':'#007E6B','501':'#FDC100','502':'#E30613',
+            '503':'#009FE3','50A':'#164194','50B':'#27A737','64':'#EF7F97','65':'#8B588D',
+            '66':'#1B8941','67A':'#383882','67B':'#383882','68':'#925C8D','70':'#CF1619',
+            '70H':'#FDB913','711':'#51AEE2','712':'#6F4092','72C':'#005F9C','72M':'#005F9C',
+            '72X':'#005F9C','733':'#3D9B7D','734':'#ED6C77','735':'#FBBA00','738':'#2596be',
+            '739':'#7B9CCC','74':'#F59D24','744':'#6EB486','747':'#EF7E86','75':'#770F00',
+            '751':'#008788','755':'#71C8DC','76':'#9F4C97','774':'#C2A712','775':'#C2A712',
+            '781':'#F7A600','782':'#95C11F','783':'#E84250','801':'#007B77','802':'#B27A22',
+            '805':'#5C7DBF','806':'#94604C','807':'#EE7656','814':'#B0BA30','82':'#9D3A7F',
+            '83':'#CE1531','842':'#286FA3','843':'#F59C00','845':'#00A0DD','856':'#EE7566',
+            '861':'#966B45','865':'#64105B','866':'#FDC61E','871':'#00A79B','871A':'#00A79B',
+            '878':'#0095D4','883':'#D676AD','884':'#8E66AB','885':'#9662A5','888':'#9662A5',
+            '889':'#13A538','901':'#8BADDC','902':'#2596be','906':'#BBD043','907':'#5C3E24',
+            '917':'#406C95','923':'#0D9EA2','924':'#5E3668','926':'#677769','928':'#C89C2F',
+            '931':'#78363C','933':'#D0559A','939':'#29694A','94':'#FF0000','941':'#977EAF',
+            '95B':'#EE7323','95C':'#EE7323','966':'#67A65C','97B':'#00B3EC','97R':'#00B3EC',
+            '981':'#E63027','982':'#91273E','983':'#2581C4','984':'#95C11F','985':'#F2B420',
+            '986':'#EA5B0C','988':'#F18700','989':'#A84693','995':'#F18700','996':'#D51130',
+            '997':'#329248','998':'#7263A9','999':'#7263A9','AIR':'#F39200','CTY':'#E30613',
+            'INN':'#56AF31','N10':'#EE2E27','NX1':'#1F3685','NX2':'#007C34','OUT':'#F39200',
+            'TMK':'#0086C7','AT Local':'#89AD3F','WX1':'#00843C',
+            'EAST':'#fdb913','STH':'#ee2e27','ONE':'#00aaef','WEST':'#97c93d',
+            'HUIA':'#ff0000'
+        };
+
         window.colourscheme = "Route";
         if (location.hash) {
             window.colourscheme = location.hash.slice(1);
@@ -688,7 +816,10 @@
         function updateMarkerColour(marker) {
             var color = "black";
             if (window.colourscheme == "Route") {
-                if (marker.route_type == 4) {
+                var rName = marker.route_short_name || '';
+                if (routeColors[rName]) {
+                    color = routeColors[rName];
+                } else if (marker.route_type == 4) {
                     color = "blue";
                 } else if (marker.route_long_name) {
                     color = stringToColour(marker.route_long_name);
@@ -703,6 +834,10 @@
                 color = speedColors(marker.speed);
             } else if (window.colourscheme == "Operator") {
                 color = operatorColors[marker.operator] || operatorColors['Unknown'];
+                // HUIA trains shown in bright red
+                if (marker.operator === 'Auckland One Rail' && marker.route_short_name === 'HUIA') {
+                    color = '#ff0000';
+                }
                 // Show sub-operator colors when Kinetic accordion is open
                 var kSub = document.getElementById('kinetic-sub');
                 if (marker.operator === 'Kinetic' && marker._labelPrefix && kSub && kSub.classList.contains('open')) {
@@ -892,22 +1027,30 @@
                         }
                     }
 
-                    // Classify generic OOS vehicles by label prefix (trains) or license plate (buses)
+                    // Classify generic OOS vehicles by label prefix (trains), callsign (ferries), or license plate (buses)
                     if (layer === layers[null]) {
                         if (/^(AMP|AMA|AMT)/i.test(label)) {
                             layer = layers["oos_train"];
                             marker.vehicle_type = 2;
+                        } else if (vehicleInfo.license_plate && /^ZM/i.test(vehicleInfo.license_plate)) {
+                            layer = layers["oos_ferry"];
+                            marker.vehicle_type = 4;
                         } else if (vehicleInfo.license_plate) {
                             layer = layers["oos_bus"];
                             marker.vehicle_type = 3;
                         }
                     }
 
-                    marker.addTo(layer);
+                    layer.addLayer(marker);
                     marker.speed = Math.round((v.position && v.position.speed) ? v.position.speed : 0);
 
-                    // Determine operator from label prefix (buses only)
-                    var operator = getOperator(label);
+                    // Determine operator
+                    var operator;
+                    if (marker.vehicle_type === 2) {
+                        operator = 'Auckland One Rail';
+                    } else {
+                        operator = getOperator(label);
+                    }
                     marker.operator = operator;
                     marker._labelPrefix = getLabelPrefix(label);
 
