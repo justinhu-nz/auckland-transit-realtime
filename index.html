@@ -302,13 +302,28 @@
             });
         }
 
-        var positron = L.tileLayer.provider('CartoDB.Positron').addTo(map);
+        // CARTO basemaps now require an API key. The placeholder below is replaced
+        // at deploy time by the GitHub Actions workflow using the CARTO_API_KEY secret.
+        var CARTO_API_KEY = '__CARTO_API_KEY__';
+        var hasCartoKey = CARTO_API_KEY && CARTO_API_KEY.indexOf('__') !== 0;
+        function cartoLayer(style) {
+            return L.tileLayer('https://{s}.basemaps.cartocdn.com/' + style + '/{z}/{x}/{y}{r}.png?key=' + encodeURIComponent(CARTO_API_KEY), {
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+                subdomains: 'abcd',
+                maxZoom: 20
+            });
+        }
+
+        var positron = cartoLayer('light_all');
+        var osm = L.tileLayer.provider("OpenStreetMap.Mapnik");
+        // Without a key (e.g. opening the file locally) CARTO tiles are watermarked, so default to OSM
+        (hasCartoKey ? positron : osm).addTo(map);
 
         var baseMaps = {
-            "OSM": L.tileLayer.provider("OpenStreetMap.Mapnik"),
+            "OSM": osm,
             "OSM Grayscale": L.tileLayer.provider("OpenStreetMap.BlackAndWhite"),
             "CartoDB Positron": positron,
-            "CartoDB Dark Matter": L.tileLayer.provider("CartoDB.DarkMatter"),
+            "CartoDB Dark Matter": cartoLayer('dark_all'),
             "ESRI WorldImagery": L.tileLayer.provider("Esri.WorldImagery"),
             "Google Hybrid": L.tileLayer('http://{s}.google.com/vt/lyrs=s,h&x={x}&y={y}&z={z}', {
                 maxZoom: 20,
